@@ -1,10 +1,29 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- 使用 console 子系統，命令列模式才能讓 shell 正常等待與接收輸出；
+         無參數啟動圖形介面時，程式會自行隱藏並卸離主控台視窗。 -->
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>hidtest</AssemblyName>
+    <RootNamespace>HidTest</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <!-- Self-contained 單檔部署：.NET 執行階段與所有 DLL 打包進單一 exe，
+       執行時解壓到暫存目錄快取，目標機器免安裝 .NET，也不會看到一堆散落的 DLL -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
