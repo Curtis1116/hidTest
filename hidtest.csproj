@@ -5,29 +5,39 @@
          無參數啟動圖形介面時，程式會自行隱藏並卸離主控台視窗。 -->
     <OutputType>Exe</OutputType>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
     <AssemblyName>hidtest</AssemblyName>
     <RootNamespace>HidTest</RootNamespace>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- .NET Framework 使用系統已安裝的 4.8 執行階段，不攜帶 runtime。 -->
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier></RuntimeIdentifier>
+    <PublishSingleFile>false</PublishSingleFile>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
   </PropertyGroup>
 
-  <!-- Self-contained 單檔部署：.NET 執行階段與所有 DLL 打包進單一 exe，
-       執行時解壓到暫存目錄快取，目標機器免安裝 .NET，也不會看到一堆散落的 DLL -->
-  <PropertyGroup>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <PublishTrimmed>false</PublishTrimmed>
-    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  <!-- Release 交付物只保留 exe；Costura 會把託管相依 DLL 嵌入其中。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="HidSharp" Version="2.6.4" />
+    <PackageReference Include="Fody" Version="6.9.3" PrivateAssets="all" />
+    <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
   </ItemGroup>
+
+  <!-- 即使增量建置曾被中斷，也不讓已嵌入的 DLL 留在 Release 交付目錄。 -->
+  <Target Name="RemoveEmbeddedDependencyFiles" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <EmbeddedDependencyFiles Include="$(OutDir)*.dll" />
+    </ItemGroup>
+    <Delete Files="@(EmbeddedDependencyFiles)" />
+  </Target>
 
 </Project>

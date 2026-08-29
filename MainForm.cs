@@ -1,4 +1,5 @@
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace HidTest
 {
@@ -6,11 +7,40 @@ namespace HidTest
     {
         private const int MaxLogLines = 5000;
         private const int TrimLogLines = 1000;
+        private const int WmDeviceChange = 0x0219;
+        private const int DbtDeviceArrival = 0x8000;
+        private const int DbtDeviceRemoveComplete = 0x8004;
+        private const int DbtDeviceTypeInterface = 0x00000005;
+        private const int DeviceNotifyWindowHandle = 0x00000000;
 
         private readonly HidService _service = new();
         private readonly List<string> _sendHistory = new();
+        private readonly System.Windows.Forms.Timer _deviceChangeTimer = new() { Interval = 500 };
         private int _historyIndex = -1;
         private bool _suppressListenEvent;
+        private bool _refreshInProgress;
+        private bool _refreshPending;
+        private IntPtr _deviceNotificationHandle;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DeviceBroadcastInterface
+        {
+            public int Size;
+            public int DeviceType;
+            public int Reserved;
+            public Guid ClassGuid;
+            public short Name;
+        }
+
+        [DllImport("hid.dll")]
+        private static extern void HidD_GetHidGuid(out Guid hidGuid);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr RegisterDeviceNotification(
+            IntPtr recipient, IntPtr notificationFilter, int flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterDeviceNotification(IntPtr handle);
 
         private static readonly Color ColorInfo = Color.FromArgb(150, 150, 150);
         private static readonly Color ColorOut = Color.FromArgb(106, 217, 126);
@@ -18,7 +48,25 @@ namespace HidTest
         private static readonly Color ColorError = Color.FromArgb(240, 100, 100);
 
         /// <summary>TreeView 子節點所攜帶的介面資訊。</summary>
-        private sealed record UsageNodeTag(int VendorId, int ProductId, int? UsagePage, int? Usage, bool HasInput, bool HasOutput);
+        private sealed class UsageNodeTag
+        {
+            public int VendorId { get; }
+            public int ProductId { get; }
+            public int? UsagePage { get; }
+            public int? Usage { get; }
+            public bool HasInput { get; }
+            public bool HasOutput { get; }
+
+            public UsageNodeTag(int vendorId, int productId, int? usagePage, int? usage, bool hasInput, bool hasOutput)
+            {
+                VendorId = vendorId;
+                ProductId = productId;
+                UsagePage = usagePage;
+                Usage = usage;
+                HasInput = hasInput;
+                HasOutput = hasOutput;
+            }
+        }
 
         public MainForm()
         {
@@ -38,6 +86,7 @@ namespace HidTest
             chkListen.CheckedChanged += ChkListen_CheckedChanged;
             treeDevices.NodeMouseDoubleClick += TreeDevices_NodeMouseDoubleClick;
             txtOutData.KeyDown += TxtOutData_KeyDown;
+            _deviceChangeTimer.Tick += DeviceChangeTimer_Tick;
 
             Load += (_, _) =>
             {
@@ -47,10 +96,79 @@ namespace HidTest
 
             FormClosing += (_, _) =>
             {
+                _deviceChangeTimer.Stop();
+                _deviceChangeTimer.Dispose();
                 _service.Log -= OnServiceLog;
                 _service.ListeningStopped -= OnListeningStopped;
                 _service.Dispose();
             };
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            RegisterForHidNotifications();
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (_deviceNotificationHandle != IntPtr.Zero)
+            {
+                UnregisterDeviceNotification(_deviceNotificationHandle);
+                _deviceNotificationHandle = IntPtr.Zero;
+            }
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WmDeviceChange &&
+                (m.WParam.ToInt32() == DbtDeviceArrival || m.WParam.ToInt32() == DbtDeviceRemoveComplete) &&
+                IsHidInterfaceNotification(m.LParam))
+            {
+                // Composite USB 裝置會連續送出多個介面事件，合併後只重新列舉一次。
+                _deviceChangeTimer.Stop();
+                _deviceChangeTimer.Start();
+            }
+
+            base.WndProc(ref m);
+        }
+
+        private void RegisterForHidNotifications()
+        {
+            if (_deviceNotificationHandle != IntPtr.Zero) return;
+
+            HidD_GetHidGuid(out Guid hidGuid);
+            var filter = new DeviceBroadcastInterface
+            {
+                Size = Marshal.SizeOf(typeof(DeviceBroadcastInterface)),
+                DeviceType = DbtDeviceTypeInterface,
+                ClassGuid = hidGuid,
+            };
+
+            IntPtr buffer = Marshal.AllocHGlobal(filter.Size);
+            try
+            {
+                Marshal.StructureToPtr(filter, buffer, false);
+                _deviceNotificationHandle = RegisterDeviceNotification(
+                    Handle, buffer, DeviceNotifyWindowHandle);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        private static bool IsHidInterfaceNotification(IntPtr data)
+        {
+            return data != IntPtr.Zero && Marshal.ReadInt32(data, sizeof(int)) == DbtDeviceTypeInterface;
+        }
+
+        private void DeviceChangeTimer_Tick(object? sender, EventArgs e)
+        {
+            _deviceChangeTimer.Stop();
+            AppendLog(LogKind.Info, "[INFO] 偵測到 USB HID 裝置變更，正在重新列舉...");
+            RefreshDeviceTree();
         }
 
         #region 記錄視窗
@@ -133,16 +251,34 @@ namespace HidTest
 
         private async void RefreshDeviceTree()
         {
+            if (_refreshInProgress)
+            {
+                _refreshPending = true;
+                return;
+            }
+
+            _refreshInProgress = true;
             btnEnumerate.Enabled = false;
             btnRefreshTree.Enabled = false;
-            treeDevices.Nodes.Clear();
-            treeDevices.Nodes.Add("列舉中...");
 
             try
             {
-                var interfaces = await Task.Run(HidService.Enumerate);
-                PopulateTree(interfaces);
-                AppendLog(LogKind.Info, $"[INFO] 列舉完成，共 {interfaces.Count} 個 HID 介面");
+                do
+                {
+                    _refreshPending = false;
+                    treeDevices.Nodes.Clear();
+                    treeDevices.Nodes.Add("列舉中...");
+
+                    var interfaces = await Task.Run(HidService.Enumerate);
+                    if (_service.CloseIfDisconnected(interfaces.Select(i => i.Device)))
+                    {
+                        SetListenChecked(false);
+                        SetConnectedState(false);
+                    }
+                    PopulateTree(interfaces);
+                    AppendLog(LogKind.Info, $"[INFO] 列舉完成，共 {interfaces.Count} 個 HID 介面");
+                }
+                while (_refreshPending && !IsDisposed);
             }
             catch (Exception ex)
             {
@@ -151,6 +287,7 @@ namespace HidTest
             }
             finally
             {
+                _refreshInProgress = false;
                 btnEnumerate.Enabled = true;
                 btnRefreshTree.Enabled = true;
             }

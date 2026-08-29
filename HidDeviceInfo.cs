@@ -5,17 +5,17 @@ namespace HidTest
     /// <summary>單一 HID 介面 (top-level collection) 的摘要資訊，供列舉清單使用。</summary>
     internal sealed class HidInterfaceInfo
     {
-        public required HidDevice Device { get; init; }
-        public int VendorId { get; init; }
-        public int ProductId { get; init; }
-        public string ProductName { get; init; } = string.Empty;
-        public string Manufacturer { get; init; } = string.Empty;
-        public string SerialNumber { get; init; } = string.Empty;
-        public int MaxInputReportLength { get; init; }
-        public int MaxOutputReportLength { get; init; }
+        public HidDevice Device { get; set; } = null!;
+        public int VendorId { get; set; }
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public string Manufacturer { get; set; } = string.Empty;
+        public string SerialNumber { get; set; } = string.Empty;
+        public int MaxInputReportLength { get; set; }
+        public int MaxOutputReportLength { get; set; }
 
         /// <summary>此介面宣告的 (UsagePage, Usage) 組合；描述元無法讀取時為空清單。</summary>
-        public IReadOnlyList<UsageInfo> Usages { get; init; } = Array.Empty<UsageInfo>();
+        public IReadOnlyList<UsageInfo> Usages { get; set; } = Array.Empty<UsageInfo>();
 
         /// <summary>裝置分組的鍵值：同一實體裝置的多個介面會共用。</summary>
         public string GroupKey => $"{VendorId:X4}:{ProductId:X4}|{SerialNumber}";
@@ -34,13 +34,23 @@ namespace HidTest
                     maker = Manufacturer + " ";
                 }
 
-                return $"{VendorId:X4}:{ProductId:X4}  {maker}{name}";
+                string serial = string.IsNullOrWhiteSpace(SerialNumber) ? "" : $" ({SerialNumber})";
+                return $"{VendorId:X4}:{ProductId:X4}  {maker}{name}{serial}";
             }
         }
     }
 
-    internal readonly record struct UsageInfo(int UsagePage, int Usage)
+    internal readonly struct UsageInfo
     {
+        public int UsagePage { get; }
+        public int Usage { get; }
+
+        public UsageInfo(int usagePage, int usage)
+        {
+            UsagePage = usagePage;
+            Usage = usage;
+        }
+
         public override string ToString() => $"UP 0x{UsagePage:X4} / U 0x{Usage:X4}";
     }
 }

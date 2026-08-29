@@ -18,7 +18,7 @@ namespace HidTest
             value = 0;
             if (string.IsNullOrWhiteSpace(input)) return false;
 
-            string s = input.Trim();
+            string s = input!.Trim();
             if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
             s = s.TrimStart('0');
             if (s.Length == 0) { value = 0; return true; }
@@ -30,7 +30,7 @@ namespace HidTest
         public static int? ParseHexOrNull(string? input)
         {
             if (string.IsNullOrWhiteSpace(input)) return null;
-            return ParseHex(input);
+            return ParseHex(input!);
         }
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace HidTest
         {
             if (string.IsNullOrWhiteSpace(input)) return Array.Empty<byte>();
 
-            var tokens = input.Split(new[] { ' ', '\t', ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var tokens = input!.Split(new[] { ' ', '\t', ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             var result = new List<byte>();
 
             foreach (var raw in tokens)

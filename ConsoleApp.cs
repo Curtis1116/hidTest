@@ -122,6 +122,7 @@ namespace HidTest
             foreach (var info in interfaces)
             {
                 string name = string.IsNullOrWhiteSpace(info.ProductName) ? "(未知裝置)" : info.ProductName;
+                if (!string.IsNullOrWhiteSpace(info.SerialNumber)) name += $" ({info.SerialNumber})";
                 string io = $"{info.MaxInputReportLength}/{info.MaxOutputReportLength}";
 
                 if (info.Usages.Count == 0)

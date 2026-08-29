@@ -1,6 +1,6 @@
 # hidtest
 
-HID 裝置測試工具，基於 .NET 10 與 HidSharp。**同一個執行檔同時提供圖形介面與命令列**：
+HID 裝置測試工具，基於 .NET Framework 4.8 與 HidSharp。**同一個執行檔同時提供圖形介面與命令列**：
 
 - 直接雙擊或不帶參數執行 → 開啟 Windows Form 圖形介面
 - 帶參數執行 → 命令列模式（語法與舊版相容）
@@ -8,6 +8,7 @@ HID 裝置測試工具，基於 .NET 10 與 HidSharp。**同一個執行檔同�
 ## 🌟 功能特色
 
 - **裝置列舉**：樹狀列出系統中所有 USB HID 裝置，並展開其底下每個介面的 Usage Page / Usage 與報告長度。
+- **熱插拔偵測**：USB HID 裝置插入或拔除時自動重新列舉；已開啟的裝置被拔除時自動停止監聽並關閉連線。
 - **精確過濾**：以 VID/PID 定位裝置，再以 **UsagePage + Usage** 選定介面（舊版僅比對 UsagePage）。
 - **資料輸出**：送出十六進位位元組，支援手動指定或自動判斷 Report ID。
 - **資料輸入**：可勾選持續監聽 Input Report，並依 Report ID 過濾。
@@ -18,8 +19,8 @@ HID 裝置測試工具，基於 .NET 10 與 HidSharp。**同一個執行檔同�
 
 ### 環境需求
 
-- 開發：[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- 執行：**無需安裝 .NET**（發行版為 self-contained 單一執行檔，已內含執行階段）
+- 開發：Visual Studio 2022（含 .NET Framework 4.8 targeting pack）或可建置 net48 的 .NET SDK
+- 執行：Windows 與 **.NET Framework 4.8**（非 self-contained）
 
 ### 編譯與發行
 
@@ -30,17 +31,17 @@ cd hidTest
 # 開發時直接執行圖形介面
 dotnet run
 
-# 產生 self-contained 單檔發行版
-dotnet publish -c Release
+# 產生單一 exe（相依 DLL 由 Costura 嵌入）
+dotnet build -c Release
 ```
 
 發行輸出位於：
 
 ```
-bin\Release\net10.0-windows\win-x64\publish\
+bin\Release\net48\
 ```
 
-該資料夾只有 `hidtest.exe`（約 100 MB，含 .NET 執行階段與所有相依 DLL）與除錯用的 `.pdb`，把 exe 複製到目標機器即可執行，無需其他檔案。首次啟動時會將內含的原生元件解壓到系統暫存目錄快取，之後啟動會更快。
+Release 建置的交付檔為 `hidtest.exe`；HidSharp 等託管相依 DLL 會由 Costura 嵌入 exe。執行檔不包含 .NET runtime，因此目標機器必須已安裝 .NET Framework 4.8。
 
 ## 🖥 圖形介面
 
@@ -128,8 +129,8 @@ CLI 與 GUI 共用 `HidService`，訊息一律透過 `Log` 事件送出：CLI �
 
 ## 🛠 技術棧
 
-- **語言**：C# 14
-- **框架**：.NET 10.0（`net10.0-windows`，Windows Forms）
+- **語言**：C#（latest）
+- **框架**：.NET Framework 4.8（`net48`，Windows Forms）
 - **函式庫**：[HidSharp](https://www.zerogpoint.org/hidsharp/) 2.6.4
 
 ## 📄 授權條款

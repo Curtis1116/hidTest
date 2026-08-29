@@ -135,6 +135,24 @@ namespace HidTest
             _devices = new List<HidDevice>();
         }
 
+        /// <summary>
+        /// 核對目前已開啟的介面是否仍存在。任一介面被移除時，關閉該裝置的所有 stream。
+        /// </summary>
+        public bool CloseIfDisconnected(IEnumerable<HidDevice> availableDevices)
+        {
+            if (!IsOpen) return false;
+
+            var availablePaths = new HashSet<string>(
+                availableDevices.Select(d => d.DevicePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (_devices.All(d => availablePaths.Contains(d.DevicePath))) return false;
+
+            Close();
+            Emit(LogKind.Info, "[INFO] 已開啟的 USB HID 裝置已移除，連線已自動關閉");
+            return true;
+        }
+
         /// <summary>挑選符合條件的介面。usagePage / usage 為 null 表示不過濾該項。</summary>
         public HidDevice? SelectDevice(bool forOutput, int? usagePage, int? usage)
         {
